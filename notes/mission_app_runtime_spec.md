@@ -32,7 +32,59 @@ the cFS sample app pattern. It currently demonstrates:
 The broader mission app set described below is not yet fully implemented in this
 repository. This spec is the target contract for subsequent implementation.
 
-## 3. Application Responsibility Model
+## 3. Platform Boundary Model
+
+The mission sensors and flight-control hardware are physically connected to the
+MicoAir H743 V2 flight controller board. The Raspberry Pi acts as the cFS host
+and communication bridge between the flight controller and the ground segment.
+
+Baseline platform responsibility:
+
+| Component | Responsibility |
+| --- | --- |
+| Flight controller board | Owns direct sensor interfaces, flight-control loop, actuator control, and flight-critical state |
+| Flight controller firmware | Owns sensor drivers, vehicle stabilization, navigation estimates exposed by the FC, and FC-level health |
+| Raspberry Pi | Hosts cFS apps, receives FC data, packages data into mission MIDs, forwards telemetry, and manages communication-path recovery |
+| cFS apps | Validate received data, publish Software Bus state, monitor link/app health, report faults, and make non-flight-control recovery decisions |
+| Ground segment | Receives telemetry, sends authorized commands, and performs operator-level monitoring |
+
+cFS apps running on the Raspberry Pi shall not assume direct electrical control
+over sensors connected to the flight controller. Sensor reset, sensor
+power-cycle, flight-control reset, actuator control, arming/disarming, and flight
+controller reboot are outside the baseline cFS recovery authority.
+
+The term "sensor recovery" in this document means logical or communication-path
+recovery unless the hardware design later exposes an explicitly approved,
+software-controllable reset or power interface that does not affect flight
+stability.
+
+Baseline allowed cFS-side recovery actions:
+
+- Reopen or reinitialize the Raspberry Pi communication endpoint.
+- Resubscribe, restart, or re-request FC telemetry streams.
+- Mark a data source invalid, degraded, lost, or failed.
+- Publish fault and recovery status to telemetry.
+- Continue operation using alternate data sources when allowed.
+
+Baseline prohibited cFS-side recovery actions:
+
+- Flight controller reboot.
+- Flight-control firmware reset.
+- Motor or actuator command.
+- Arming or disarming command.
+- Sensor power-cycle through the FC.
+- Flight mode or flight-control parameter changes that may affect stability.
+
+Any exception to this baseline shall require a separate mission safety policy and
+explicit command authorization.
+
+The hardware connection topology for `img_app`, `uwb_app`, and any future
+mission payload device shall be documented before enabling device-specific
+recovery. Until the topology is defined, recovery for those apps shall be limited
+to data validity handling, local parser or transport recovery, telemetry
+reporting, and degraded operation.
+
+## 4. Application Responsibility Model
 
 Each application shall own one clear responsibility and publish its state through
 defined MID contracts. Apps shall not directly overwrite another app's owned
@@ -40,8 +92,8 @@ state.
 
 | App | Responsibility | Publish MID | Subscribe MID |
 | --- | --- | --- | --- |
-| `imu_app` | Read IMU and publish inertial state | `IMU_STATE_MID` | TBD |
-| `gps_app` | Read GPS/GNSS and publish navigation fix | `GPS_STATE_MID` | TBD |
+| `imu_app` | Receive FC-provided IMU/inertial state and publish mission IMU state | `IMU_STATE_MID` | TBD |
+| `gps_app` | Receive FC-provided GPS/GNSS state and publish mission navigation fix | `GPS_STATE_MID` | TBD |
 | `telemetry_app` | Monitor communication or telemetry input health | `TELEMETRY_STATUS_MID` | `TELEMETRY_MONITOR_MID` or external monitor input |
 | `img_app` | Capture image and publish image metadata | `IMAGE_META_MID` | TBD |
 | `uwb_app` | Estimate UWB position | `UWB_POS_MID` | TBD |
@@ -50,7 +102,7 @@ state.
 | `map_app` | Manage accumulated map and map updates | `MAP_UPDATE_MID` | `ALIGN_STATE_MID`, `RECON_RESULT_REF_MID` |
 | `cfs_core_app` | Monitor system health and recovery policy | `SYSTEM_HEALTH_MID` | App health/status MIDs |
 
-## 4. MID Contract Rules
+## 5. MID Contract Rules
 
 Every mission MID shall have a documented owner, producer, consumer list,
 payload layout, publication rate, validity rules, and fault behavior.
@@ -71,7 +123,7 @@ candidate bases are cFS mission elapsed time, GPS time, Unix time, or a monotoni
 platform clock. `align_app` shall not fuse inputs whose time basis or time
 validity is unknown.
 
-### 4.1 MID Contract Table Template
+### 5.1 MID Contract Table Template
 
 Each mission MID shall be specified using the following contract fields before
 the producing app is implemented.
@@ -94,7 +146,7 @@ The complete per-MID contract table shall be populated before implementing each
 app. Until finalized, the MID contract fields are listed as TBD in Section 3 and
 tracked in Section 16.
 
-### 4.2 Time Basis Validity Policy
+### 5.2 Time Basis Validity Policy
 
 A payload time basis shall be considered known only when the producer declares
 the timestamp source, timestamp unit, and `TimeValid=true`.
@@ -122,9 +174,9 @@ shall be required only when absolute timing is needed by the mission policy.
 The final time basis selection and validity rules shall be defined before
 `align_app` implementation begins and are tracked in Section 16.
 
-## 5. Minimum Payload Candidates
+## 6. Minimum Payload Candidates
 
-### 5.1 `IMU_STATE_MID`
+### 6.1 `IMU_STATE_MID`
 
 Minimum fields:
 
@@ -137,7 +189,7 @@ Minimum fields:
 - Sensor quality or covariance indicator.
 - Fault code.
 
-### 5.2 `GPS_STATE_MID`
+### 6.2 `GPS_STATE_MID`
 
 Minimum fields:
 
@@ -150,7 +202,7 @@ Minimum fields:
 - Accuracy or HDOP/VDOP.
 - Fault code.
 
-### 5.3 `TELEMETRY_STATUS_MID`
+### 6.3 `TELEMETRY_STATUS_MID`
 
 Minimum fields:
 
@@ -165,7 +217,7 @@ Minimum fields:
 The meaning of `TELEMETRY_STATUS_MID` shall be kept narrow: it represents
 telemetry or communication health, not the full system health state.
 
-### 5.4 `ALIGN_STATE_MID`
+### 6.4 `ALIGN_STATE_MID`
 
 Minimum fields:
 
@@ -178,7 +230,7 @@ Minimum fields:
 - Quality or covariance.
 - Fault code.
 
-### 5.5 `MAP_UPDATE_MID`
+### 6.5 `MAP_UPDATE_MID`
 
 Minimum fields:
 
@@ -189,7 +241,7 @@ Minimum fields:
 - Update result code.
 - Fault code.
 
-### 5.6 `RECON_RESULT_REF_MID`
+### 6.6 `RECON_RESULT_REF_MID`
 
 `RECON_RESULT_REF_MID` shall carry a reference to a reconstruction result, not
 raw reconstruction data. Large reconstruction outputs shall not be transported
@@ -216,7 +268,7 @@ Minimum fields:
 The final large-result transfer mechanism shall be defined before implementing
 `recon_app` and `map_app` and is tracked in Section 16.
 
-## 6. Runtime-Changeable Parameters
+## 7. Runtime-Changeable Parameters
 
 Runtime changes shall be divided into three mechanisms:
 
@@ -254,10 +306,11 @@ Runtime-restricted or boot-time-only examples:
 - Startup order.
 - Critical app classification.
 
-Changing a restricted value shall require app restart, processor reset, reboot,
-or mission rebuild according to the final operations policy.
+Changing a restricted value shall require app restart, Raspberry Pi/cFS host
+reset, reboot, or mission rebuild according to the final operations policy.
+Flight-controller-affecting changes are outside the baseline cFS authority.
 
-## 7. App Period and Priority Policy
+## 8. App Period and Priority Policy
 
 App period and app priority shall be specified separately.
 
@@ -275,7 +328,7 @@ App priority shall be treated as a restricted operational parameter. Runtime
 priority changes are not part of the baseline policy unless explicitly approved
 by a later mission safety review.
 
-## 8. Fault Classification
+## 9. Fault Classification
 
 Faults shall be classified before recovery action is selected.
 
@@ -287,12 +340,14 @@ Faults shall be classified before recovery action is selected.
 | `LINK_FAULT` | Communication path failure | telemetry link timeout, packet loss |
 | `SYSTEM_FAULT` | Shared platform failure | CPU, filesystem, scheduler, power issue |
 
-Sensor apps shall not directly trigger processor reset for a single hardware
-fault. A sensor app shall first publish invalid, degraded, lost, or failed state.
-Reset, power cycle, failover, safe mode, or system reboot decisions shall be made
-by a recovery authority such as `cfs_core_app` or a dedicated health/safety app.
+Sensor apps shall not directly trigger Pi/cFS host reset, flight controller
+reset, or sensor power-cycle for a single hardware fault. A sensor app shall
+first publish invalid, degraded, lost, or failed state. Raspberry Pi/cFS-side
+recovery decisions shall be made by a recovery authority such as `cfs_core_app`
+or a dedicated health/safety app. Flight-controller-affecting recovery is
+outside the baseline authority defined by this spec.
 
-## 9. Hardware Fault Response
+## 10. Hardware Fault Response
 
 Hardware-related fault handling shall follow staged recovery:
 
@@ -301,28 +356,30 @@ Hardware-related fault handling shall follow staged recovery:
 | 0 | Normal | Publish valid state |
 | 1 | Data quality degraded | Publish valid or degraded with quality/fault detail |
 | 2 | Timeout or stale data | Publish invalid or lost state and last-good age |
-| 3 | Soft recovery | Reinitialize driver, reopen device, or resubscribe |
-| 4 | Hard recovery request | Request bus reset or device power cycle through recovery authority |
+| 3 | Soft recovery | Reinitialize local parser, reopen Pi communication endpoint, or resubscribe |
+| 4 | Hard recovery request | Request communication-path recovery through recovery authority |
 | 5 | Failover | Use backup sensor or alternate source, if available |
-| 6 | Degraded mode | Continue mission with reduced function |
-| 7 | Safe mode request | Request system-level safe mode when mission continuation is unsafe |
+| 6 | Degraded cFS operation | Continue cFS telemetry reporting with reduced or invalid data sources |
+| 7 | Minimum reporting | Keep only required cFS telemetry/fault reporting active when recovery cannot restore normal operation |
 
 Example hardware responses:
 
-- `imu_app`: detect read timeout, saturated values, self-test failure, or sample
-  rate drop; publish degraded/lost and request recovery after retry threshold.
-- `gps_app`: detect no fix, timestamp jump, low satellite count, or serial
-  timeout; publish no-fix/degraded and allow `align_app` to operate without GPS.
+- `imu_app`: detect missing FC-provided IMU stream, saturated values, or sample
+  rate drop; publish degraded/lost and request communication-path recovery after
+  retry threshold.
+- `gps_app`: detect no fix, timestamp jump, low satellite count, or missing
+  FC-provided GPS stream; publish no-fix/degraded and allow `align_app` to
+  operate without GPS.
 - `img_app`: detect frame timeout or corrupt image; publish invalid image
   metadata and prevent `recon_app` from using the frame.
 - `uwb_app`: detect insufficient anchors or outlier ranges; publish degraded
   quality and allow `align_app` fallback.
 
-## 10. Recovery Limit and Escalation Policy
+## 11. Recovery Limit and Escalation Policy
 
 cFS does not define fixed retry, restart, or reboot timing values. Recovery
 limits shall be mission-defined based on hardware characteristics, fault
-criticality, power budget, operational risk, and safe-mode policy.
+criticality, power budget, operational risk, and operator recovery policy.
 
 Each recovery action shall define:
 
@@ -342,28 +399,28 @@ shall be made by the recovery authority.
 Default recovery flow:
 
 1. General fault: perform local retry.
-2. Repeated fault: request hard recovery through the recovery authority.
-3. Continued failure: enter degraded operation, recovery mode, or safe mode.
+2. Repeated fault: request communication-path recovery through the recovery authority.
+3. Continued failure: enter `CFS_DEGRADED`, `CFS_RECOVERY`, or minimum reporting.
 4. System hang: allow watchdog reset.
-5. Repeated reboot: force recovery-mode or safe-mode boot.
+5. Repeated reboot: force `CFS_RECOVERY` or minimum-reporting startup.
 
-### 10.1 Recommended First-Pass Recovery Limits
+### 11.1 Recommended First-Pass Recovery Limits
 
 The following values are first-pass mission defaults. They are not cFS-defined
 standards and shall be revised after hardware testing.
 
 | Target | Fault Condition | First Recovery | Retry Interval | Max Retry Count | Escalation |
 | --- | --- | --- | --- | --- | --- |
-| `imu_app` | IMU read timeout, stale sample, invalid sample rate | Reinitialize driver or reopen device | 10 s | 3 | Mark IMU `FAILED`; request sensor power-cycle through recovery authority |
-| `gps_app` | Serial timeout, no receiver response | Reopen serial device or reinitialize receiver interface | 30 s | 5 | Mark GPS `FAILED`; continue navigation without GPS if allowed |
+| `imu_app` | Missing FC-provided IMU stream, stale sample, invalid sample rate | Reinitialize local parser or re-request IMU stream | 10 s | 3 | Mark IMU `FAILED`; continue without direct FC reset or sensor power-cycle |
+| `gps_app` | Missing FC-provided GPS stream, no fix, stale GPS state | Reinitialize local parser or re-request GPS stream | 30 s | 5 | Mark GPS `FAILED`; continue navigation without GPS if allowed |
 | `uwb_app` | Insufficient anchors, invalid range set, stale range data | Clear range window and restart ranging cycle | 5 s | 5 | Mark UWB `DEGRADED` or `FAILED`; allow `align_app` fallback |
 | `img_app` | Frame timeout, corrupt frame, capture failure | Restart capture pipeline | 10 s | 3 | Mark camera `FAILED`; block image-dependent reconstruction |
 | `recon_app` | Reconstruction job failure, timeout, invalid output | Abort current job and restart next requested job | Per job boundary | 2 | Mark reconstruction `FAILED`; preserve last valid result reference |
-| `telemetry_app` | Monitor input timeout, link lost | Restart transport or monitor input path | 5 s | 3 | Mark link `LOST`; request recovery authority evaluation |
+| `telemetry_app` | Monitor input timeout, link lost | Restart Pi-side transport or monitor input path | 5 s | 3 | Mark link `LOST`; request recovery authority evaluation |
 | `align_app` | Required input unavailable or time basis invalid | Reject current fusion frame | Next alignment frame | N/A | Publish invalid/degraded fused state |
 | `map_app` | Map update commit failure or checkpoint failure | Retry commit from last valid pending update | 30 s | 3 | Roll back to last valid checkpoint; if rollback target is also invalid or corrupt, mark map `FAILED` and continue with last known valid map or enter degraded mode |
-| `cfs_core_app` | Repeated app failure or system fault | Restart failed app if allowed | 60 s | 3 per app | Enter `RECOVERY` or `SAFE` mode |
-| Processor | System-level unrecoverable fault | Processor reset | N/A | 1 per 1800 s recovery window | Safe-mode boot if fault repeats |
+| `cfs_core_app` | Repeated app failure or system fault | Restart failed app if allowed | 60 s | 3 per app | Enter `CFS_RECOVERY` or minimum reporting |
+| Raspberry Pi/cFS host | System-level unrecoverable cFS host fault | Pi/cFS process or host reset | N/A | 1 per 1800 s recovery window | Minimum-reporting startup if fault repeats |
 
 For frame-based consumers such as `align_app`, retry count is N/A because the
 app rejects the current frame and evaluates the next frame independently. Each
@@ -385,7 +442,7 @@ Recommended first-pass stable periods:
 | Map checkpoint path | 1 successful checkpoint |
 | System-level recovery | 1800 s |
 
-### 10.2 Escalation Rule
+### 11.2 Escalation Rule
 
 Recovery escalation shall follow the lowest-risk action first.
 
@@ -395,30 +452,31 @@ Default escalation order:
 2. Mark current output invalid, degraded, lost, or failed.
 3. Retry local operation.
 4. Reinitialize local driver, pipe, file handle, or transport.
-5. Request hardware reset or device power-cycle through the recovery authority.
+5. Request Pi-side communication-path recovery through the recovery authority.
 6. Fail over to backup device or alternate data source, if available.
-7. Continue in degraded mode.
-8. Enter recovery mode.
-9. Enter safe mode.
-10. Request processor reset only for system-level or unrecoverable repeated faults.
+7. Continue in `CFS_DEGRADED`.
+8. Enter `CFS_RECOVERY`.
+9. Enter minimum-reporting operation.
+10. Request Raspberry Pi/cFS host reset only for system-level or unrecoverable repeated faults.
 
-Apps shall not skip directly from local fault detection to processor reset unless
-explicitly allowed by mission safety policy.
+Apps shall not skip directly from local fault detection to Pi/cFS host reset
+unless explicitly allowed by mission safety policy. Apps shall not request flight
+controller reboot or flight-control reset under the baseline policy.
 
-#### 10.2.1 Escalation Decision Rules
+#### 11.2.1 Escalation Decision Rules
 
 | Condition | Required Escalation |
 | --- | --- |
 | Single invalid sample | Reject sample; keep app running |
 | Consecutive invalid samples below retry threshold | Publish degraded state |
 | Timeout exceeds retry threshold | Perform local soft recovery |
-| Local soft recovery limit exceeded | Request hard recovery through recovery authority |
-| Hard recovery limit exceeded | Mark target failed and enter degraded operation |
-| Required mission function unavailable | Request `RECOVERY` or `SAFE` mode |
+| Local soft recovery limit exceeded | Request communication-path recovery through recovery authority |
+| Hard recovery limit exceeded | Mark target failed and enter `CFS_DEGRADED` |
+| Required cFS function unavailable | Request `CFS_RECOVERY` or minimum-reporting operation |
 | Repeated app crash within recovery window | Stop restarting app and request recovery authority action |
-| Repeated processor reset within reboot loop window | Boot into safe mode and block unsafe actions |
+| Repeated Pi/cFS host reset within reboot loop window | Start in minimum-reporting operation and block unsafe actions |
 
-### 10.3 Watchdog Reset Policy
+### 11.3 Watchdog Reset Policy
 
 The watchdog shall be used only for failures where the system cannot reliably
 continue execution or cannot rely on normal software recovery.
@@ -437,7 +495,7 @@ Watchdog reset may be allowed for:
 - Deadlock or task starvation affecting system-level control.
 - Repeated failure to service required health checks.
 
-#### 10.3.1 Watchdog Heartbeat Rules
+#### 11.3.1 Watchdog Heartbeat Rules
 
 Each critical app shall publish or update a heartbeat at a defined interval.
 The recovery authority shall monitor heartbeat age and health state.
@@ -448,9 +506,9 @@ publish heartbeat state while the job is in progress.
 
 | Component | Heartbeat Timeout | First Action | Escalation |
 | --- | --- | --- | --- |
-| Critical app | 3 missed heartbeats | Restart app if restart is allowed | Enter `RECOVERY` if restart fails |
-| Recovery authority | 2 missed health cycles | Watchdog reset | Safe-mode boot if repeated |
-| Scheduler/time service | 2 missed cycles | Watchdog reset | Safe-mode boot |
+| Critical app | 3 missed heartbeats | Restart app if restart is allowed | Enter `CFS_RECOVERY` if restart fails |
+| Recovery authority | 2 missed health cycles | Watchdog reset | Minimum-reporting startup if repeated |
+| Scheduler/time service | 2 missed cycles | Watchdog reset | Minimum-reporting startup |
 | Non-critical app | 5 missed heartbeats | Mark failed or restart app | Continue degraded if allowed |
 
 Missed heartbeat counts shall be converted to timeout durations using the
@@ -474,31 +532,32 @@ Recommended first-pass values:
 
 These values are first-pass defaults and shall be revised after timing tests.
 
-### 10.4 Reboot Loop Prevention Policy
+### 11.4 Reboot Loop Prevention Policy
 
 The system shall prevent repeated automatic reboot from keeping the platform or
 system in an unsafe or unusable state.
 
-A reboot loop is detected when the number of processor resets exceeds the
-allowed limit within a configured time window.
+A reboot loop is detected when the number of Raspberry Pi/cFS host resets
+exceeds the allowed limit within a configured time window. Flight controller
+reboot is not part of this baseline policy.
 
 Recommended first-pass rule:
 
 | Condition | Action |
 | --- | --- |
-| 2 processor resets within 1800 s | Boot into `RECOVERY` mode |
-| 3 processor resets within 1800 s | Boot into `SAFE` mode |
-| Safe-mode boot caused by reboot loop | Load minimum config and block nonessential app startup |
+| 2 Pi/cFS host resets within 1800 s | Start in `CFS_RECOVERY` |
+| 3 Pi/cFS host resets within 1800 s | Start in minimum-reporting operation |
+| Minimum-reporting startup caused by reboot loop | Load minimum config and block nonessential app startup |
 | Persistent state validation failure | Ignore corrupted record and load default safe config |
 | Same app causes 3 restarts within 600 s | Stop restarting that app and mark it `FAILED` |
 | Same hardware target fails 3 hard recoveries within 1800 s | Disable target and continue degraded if allowed |
 
-#### 10.4.1 Persistent Counters Required for Reboot Loop Prevention
+#### 11.4.1 Persistent Counters Required for Reboot Loop Prevention
 
 The following counters shall be stored persistently:
 
 - Boot count.
-- Processor reset count.
+- Pi/cFS host reset count.
 - Watchdog reset count.
 - Last reset reason.
 - Last reset timestamp.
@@ -506,13 +565,13 @@ The following counters shall be stored persistently:
 - Per-app restart count.
 - Per-app last fault code.
 - Per-hardware-target recovery attempt count.
-- Safe-mode entry reason.
-- Last successful nominal-mode timestamp.
+- Minimum-reporting entry reason.
+- Last successful `CFS_NOMINAL` timestamp.
 
 Each persistent counter record shall include version, size, CRC/checksum,
 timestamp, and generation counter.
 
-#### 10.4.2 Counter Reset Rules
+#### 11.4.2 Counter Reset Rules
 
 Persistent recovery counters shall not be cleared immediately after reboot.
 Counters may be cleared only after the system remains stable for the configured
@@ -522,15 +581,15 @@ Recommended first-pass reset rules:
 
 | Counter | Reset Condition |
 | --- | --- |
-| App restart count | App remains `NOMINAL` for 300 s |
+| App restart count | App remains `CFS_NOMINAL` for 300 s |
 | Hardware recovery count | Target remains valid for 300 s |
-| Processor reset window | System remains out of reset loop for 1800 s |
+| Pi/cFS host reset window | System remains out of reset loop for 1800 s |
 | Watchdog reset count | No watchdog reset for 1800 s |
-| Safe-mode entry reason | Operator command or validated mission policy |
+| Minimum-reporting entry reason | Operator command or validated mission policy |
 
 Manual counter clearing shall require explicit command authorization.
 
-## 11. Persistent State and Reboot Recovery
+## 12. Persistent State and Reboot Recovery
 
 Persistent state shall be limited to mission state, fault and recovery counters,
 last known valid navigation or map references, and operator-modified
@@ -541,10 +600,10 @@ Candidate persistent values:
 
 | Category | Persistent Values |
 | --- | --- |
-| Boot/fault | Last reset reason, boot count, processor reset count, watchdog reset count, watchdog indication, reboot loop window start timestamp |
+| Boot/fault | Last reset reason, boot count, Pi/cFS host reset count, watchdog reset count, watchdog indication, reboot loop window start timestamp |
 | App health | App state, restart count, last fault code |
 | Hardware health | Sensor health state, last hardware fault code, recovery attempt count |
-| Mission state | Mission phase, active mode, degraded/safe mode entry |
+| Mission state | Mission phase, active cFS state, degraded/recovery/minimum-reporting entry |
 | Navigation | Last valid GPS fix, last valid pose, last valid timestamp |
 | Mapping | Map checkpoint ID, map version, last committed update |
 | Telemetry | Last link state, last good contact time, active transport ID |
@@ -556,14 +615,14 @@ Reboot handling:
 | Event | Recovery Behavior |
 | --- | --- |
 | App restart | Restore app-local state only if valid and compatible |
-| Processor reset or soft boot | Restore persistent config, mission mode, last health, and checkpoints |
-| Hard boot or power cycle | Restore only validated persistent state and default safe config |
-| Safe mode boot | Load minimum config and expose fault logs; block unsafe recovery actions |
+| Pi/cFS host reset or soft boot | Restore persistent config, cFS state, last health, and checkpoints |
+| Pi/cFS host hard boot or power cycle | Restore only validated persistent state and default safe config |
+| Minimum-reporting startup | Load minimum config and expose fault logs; block unsafe recovery actions |
 
 Every persistent record shall include enough integrity metadata for validation,
 such as version, size, CRC/checksum, timestamp, and generation counter.
 
-## 12. Active/Pending Configuration Model
+## 13. Active/Pending Configuration Model
 
 Critical apps shall maintain separate active and pending configuration buffers.
 Runtime configuration updates shall be written to the pending buffer first and
@@ -595,7 +654,7 @@ Activation boundaries shall be app-specific:
 | `map_app` | Checkpoint or map commit boundary |
 | `cfs_core_app` | Operator-approved activation or safe system boundary |
 
-## 13. Double-Buffered Runtime Data Model
+## 14. Double-Buffered Runtime Data Model
 
 Producer/consumer data shared inside an app or between app tasks shall use a
 double-buffered or equivalent atomic handoff model when partial updates would be
@@ -617,43 +676,45 @@ This model is recommended for:
 - Map update references.
 - Critical health/recovery policy snapshots.
 
-## 14. Mode and Command Safety
+## 15. cFS State and Command Safety
 
-The system shall define mission modes before final command authorization rules:
+cFS state shall describe only the Raspberry Pi/cFS communication and
+state-management layer. It shall not be treated as an FC flight mode or FC
+failsafe state.
 
-- `BOOT`
-- `INIT`
-- `NOMINAL`
-- `DEGRADED`
-- `RECOVERY`
-- `SAFE`
-- `SHUTDOWN`
+The baseline cFS states are:
+
+- `CFS_NOMINAL`
+- `CFS_DEGRADED`
+- `CFS_RECOVERY`
+
+`SHUTDOWN` is treated as an ordered procedure, not a normal operating state.
+FC flight modes and failsafe states are owned by the flight controller firmware
+and may be reported by cFS as telemetry only.
 
 Each command shall define the modes in which it is allowed. Dangerous commands
-such as hardware reset, power cycle, table activation, priority change, and safe
-mode exit shall require explicit authorization policy in a later command safety
-spec.
+such as Pi/cFS host reset, table activation, priority change, and recovery exit
+shall require explicit authorization policy in a later command safety spec.
+Flight controller reboot, flight-control reset, sensor power-cycle through the
+FC, motor or actuator command, arming/disarming, and flight-control parameter
+changes are prohibited by the baseline policy.
 
-### 14.1 Per-Mode App Operation Policy
+### 15.1 Per-State App Operation Policy
 
 Each app shall define whether it is enabled, suspended, degraded, or blocked in
-each mission mode. The table below defines the default system-level policy.
+each cFS state. The table below defines the default cFS-layer policy.
 Per-app deviations shall be documented when each app is implemented.
 
-| Mode | Default Policy |
+| cFS State | Default Policy |
 | --- | --- |
-| `BOOT` | Start minimum required apps only; sensor and mission apps are not yet running |
-| `INIT` | Initialize apps and validate persistent state; apps may publish invalid output during initialization |
-| `NOMINAL` | Run all mission-approved apps; all outputs expected valid |
-| `DEGRADED` | Run apps whose dependencies remain valid; apps with unavailable inputs shall publish degraded outputs and continue if the active source-mask policy allows |
-| `RECOVERY` | Run recovery authority, telemetry, and required diagnostic apps; suspend nonessential mission apps |
-| `SAFE` | Run minimum safe configuration; block nonessential or unsafe actions; expose fault logs |
-| `SHUTDOWN` | Stop nonessential apps in defined order; preserve required persistent state before power-off |
+| `CFS_NOMINAL` | FC data reception, validation, Software Bus publication, and ground telemetry are operating normally |
+| `CFS_DEGRADED` | Some data, app, or communication path is stale, invalid, or unstable; cFS continues reporting available telemetry with degraded status |
+| `CFS_RECOVERY` | cFS is reinitializing an app, parser, transport, or communication path; nonessential cFS processing may be limited during recovery |
 
-The final per-app mode table shall be defined before command authorization is
-finalized and is tracked in Section 16.
+The final per-app state table shall be defined before command authorization is
+finalized and is tracked in Section 17.
 
-## 15. Testing Requirements
+## 16. Testing Requirements
 
 Each app shall support or be testable through:
 
@@ -670,7 +731,7 @@ The existing `telemetry_app` E2E sender only validates monitor input and link
 state behavior. Additional test tools are required for IMU, GPS, UWB, image,
 reconstruction, alignment, map, and system health message flows.
 
-## 16. Open Items
+## 17. Open Items
 
 - Final MID numeric assignments.
 - Final timestamp basis and units.
@@ -691,9 +752,9 @@ reconstruction, alignment, map, and system health message flows.
   minimum condition for a time basis to be considered known by `align_app`.
 - Define `RECON_RESULT_REF_MID` payload and large-result transfer policy,
   including the storage backend and reference mechanism.
-- Define per-mode app operation policy, including which apps run, suspend, or
-  publish invalid output in `BOOT`, `INIT`, `NOMINAL`, `DEGRADED`, `RECOVERY`,
-  `SAFE`, and `SHUTDOWN`.
+- Define per-state app operation policy, including which apps run, suspend, or
+  publish invalid output in `CFS_NOMINAL`, `CFS_DEGRADED`, `CFS_RECOVERY`, and
+  minimum-reporting startup. `SHUTDOWN` shall remain an ordered procedure.
 - Define map rollback failure behavior when the last valid checkpoint is missing,
   corrupt, or incompatible.
 - Define app-level correctness properties for sequence handling, timeout
@@ -702,3 +763,6 @@ reconstruction, alignment, map, and system health message flows.
 - Final numeric recovery constants for retry intervals, retry limits, heartbeat
   periods, watchdog timeout, and reboot loop windows, to be confirmed after
   hardware testing.
+- Define hardware connection topology for `img_app`, `uwb_app`, and future
+  mission payload devices: Raspberry Pi direct, FC-bridged, or other. Update
+  recovery policy according to the confirmed topology.

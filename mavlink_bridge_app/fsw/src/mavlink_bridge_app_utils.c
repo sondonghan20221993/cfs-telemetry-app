@@ -694,6 +694,9 @@ void MAVLINK_BRIDGE_APP_ServiceSerial(void)
     ReadSize = read(MAVLINK_BRIDGE_APP_Data.SerialFd, RxBuffer, sizeof(RxBuffer));
     if (ReadSize > 0)
     {
+        CFE_EVS_SendEvent(MAVLINK_BRIDGE_APP_LINK_EID, CFE_EVS_EventType_INFORMATION,
+                          "MAVLINK_BRIDGE_APP: read %ld bytes first=0x%02X",
+                          (long)ReadSize, (unsigned int)RxBuffer[0]);
         MAVLINK_BRIDGE_APP_HandleReceivedBytes(RxBuffer, ReadSize, NowMs);
         return;
     }

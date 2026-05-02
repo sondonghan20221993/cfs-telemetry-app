@@ -192,8 +192,14 @@ static CFE_Status_t MAVLINK_BRIDGE_APP_OpenSerial(void)
         case 115200:
             BaudConstant = B115200;
             break;
+        case 230400:
+            BaudConstant = B230400;
+            break;
         default:
             MAVLINK_BRIDGE_APP_Data.LastErrorCode = MAVLINK_BRIDGE_ERROR_INVALID_VALUE;
+            CFE_EVS_SendEvent(MAVLINK_BRIDGE_APP_LINK_EID, CFE_EVS_EventType_ERROR,
+                              "MAVLINK_BRIDGE_APP: unsupported baud=%lu",
+                              (unsigned long)MAVLINK_BRIDGE_APP_SERIAL_BAUDRATE);
             return CFE_STATUS_EXTERNAL_RESOURCE_FAIL;
     }
 
@@ -201,13 +207,20 @@ static CFE_Status_t MAVLINK_BRIDGE_APP_OpenSerial(void)
     if (Fd < 0)
     {
         MAVLINK_BRIDGE_APP_Data.LastErrorCode = MAVLINK_BRIDGE_ERROR_SERIAL_OPEN_FAIL;
+        CFE_EVS_SendEvent(MAVLINK_BRIDGE_APP_LINK_EID, CFE_EVS_EventType_ERROR,
+                          "MAVLINK_BRIDGE_APP: open() failed path=%s errno=%d",
+                          MAVLINK_BRIDGE_APP_SERIAL_PATH, errno);
         return CFE_STATUS_EXTERNAL_RESOURCE_FAIL;
     }
 
     if (tcgetattr(Fd, &Tio) != 0)
     {
+        int SavedErrno = errno;
         close(Fd);
         MAVLINK_BRIDGE_APP_Data.LastErrorCode = MAVLINK_BRIDGE_ERROR_SERIAL_OPEN_FAIL;
+        CFE_EVS_SendEvent(MAVLINK_BRIDGE_APP_LINK_EID, CFE_EVS_EventType_ERROR,
+                          "MAVLINK_BRIDGE_APP: tcgetattr() failed path=%s errno=%d",
+                          MAVLINK_BRIDGE_APP_SERIAL_PATH, SavedErrno);
         return CFE_STATUS_EXTERNAL_RESOURCE_FAIL;
     }
 
@@ -227,8 +240,14 @@ static CFE_Status_t MAVLINK_BRIDGE_APP_OpenSerial(void)
 
     if (tcsetattr(Fd, TCSANOW, &Tio) != 0)
     {
+        int SavedErrno = errno;
         close(Fd);
         MAVLINK_BRIDGE_APP_Data.LastErrorCode = MAVLINK_BRIDGE_ERROR_SERIAL_OPEN_FAIL;
+        CFE_EVS_SendEvent(MAVLINK_BRIDGE_APP_LINK_EID, CFE_EVS_EventType_ERROR,
+                          "MAVLINK_BRIDGE_APP: tcsetattr() failed path=%s baud=%lu errno=%d",
+                          MAVLINK_BRIDGE_APP_SERIAL_PATH,
+                          (unsigned long)MAVLINK_BRIDGE_APP_SERIAL_BAUDRATE,
+                          SavedErrno);
         return CFE_STATUS_EXTERNAL_RESOURCE_FAIL;
     }
 

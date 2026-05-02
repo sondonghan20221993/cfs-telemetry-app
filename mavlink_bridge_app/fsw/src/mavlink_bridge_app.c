@@ -4,6 +4,7 @@
 #include "mavlink_bridge_app_eventids.h"
 #include "mavlink_bridge_app_dispatch.h"
 #include "mavlink_bridge_app_version.h"
+#include <string.h>
 
 MAVLINK_BRIDGE_APP_Data_t MAVLINK_BRIDGE_APP_Data;
 
@@ -23,12 +24,16 @@ void MAVLINK_BRIDGE_APP_Main(void)
     while (CFE_ES_RunLoop(&MAVLINK_BRIDGE_APP_Data.RunStatus) == true)
     {
         CFE_ES_PerfLogExit(MAVLINK_BRIDGE_APP_PERF_ID);
-        Status = CFE_SB_ReceiveBuffer(&SBBufPtr, MAVLINK_BRIDGE_APP_Data.CommandPipe, CFE_SB_PEND_FOREVER);
+        Status = CFE_SB_ReceiveBuffer(&SBBufPtr, MAVLINK_BRIDGE_APP_Data.CommandPipe, MAVLINK_BRIDGE_APP_SB_POLL_TIMEOUT_MS);
         CFE_ES_PerfLogEntry(MAVLINK_BRIDGE_APP_PERF_ID);
 
         if (Status == CFE_SUCCESS)
         {
             MAVLINK_BRIDGE_APP_TaskPipe(SBBufPtr);
+        }
+        else if (Status == CFE_SB_TIME_OUT)
+        {
+            MAVLINK_BRIDGE_APP_ServiceSerial();
         }
         else
         {
@@ -46,11 +51,12 @@ CFE_Status_t MAVLINK_BRIDGE_APP_Init(void)
 {
     CFE_Status_t Status;
 
-    CFE_PSP_MemSet(&MAVLINK_BRIDGE_APP_Data, 0, sizeof(MAVLINK_BRIDGE_APP_Data));
+    memset(&MAVLINK_BRIDGE_APP_Data, 0, sizeof(MAVLINK_BRIDGE_APP_Data));
 
     MAVLINK_BRIDGE_APP_Data.RunStatus           = CFE_ES_RunStatus_APP_RUN;
     MAVLINK_BRIDGE_APP_Data.LinkState           = MAVLINK_BRIDGE_LINK_DISCONNECTED;
     MAVLINK_BRIDGE_APP_Data.ReconnectIntervalMs = MAVLINK_BRIDGE_APP_RECONNECT_INTERVAL_MS;
+    MAVLINK_BRIDGE_APP_Data.SerialFd            = -1;
 
     Status = CFE_EVS_Register(NULL, 0, CFE_EVS_EventFilter_BINARY);
     if (Status != CFE_SUCCESS)

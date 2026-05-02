@@ -22,6 +22,7 @@ typedef struct
     uint8                     CommandErrorCounter;
     uint8                     LinkState;
     uint8                     LastErrorCode;
+    uint32                    BytesReceived;
     uint32                    ReconnectAttemptCount;
     uint32                    ParseErrorCount;
     uint32                    LastRxTimestampMs;

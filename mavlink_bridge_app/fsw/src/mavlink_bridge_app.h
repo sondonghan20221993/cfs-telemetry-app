@@ -22,7 +22,10 @@ typedef struct
     uint32    ReconnectIntervalMs;
     uint32    LastRxTimestampMs;
     uint32    LastReconnectAttemptMs;
+    uint32    ReconnectAttemptCount;
     uint32    ParseErrorCount;
+    uint32    BytesReceived;
+    int32     SerialFd;
     uint8     LinkState;
     uint8     LastErrorCode;
     uint16    Spare;
@@ -40,5 +43,6 @@ void         MAVLINK_BRIDGE_APP_Main(void);
 CFE_Status_t MAVLINK_BRIDGE_APP_Init(void);
 void         MAVLINK_BRIDGE_APP_ReportHousekeeping(void);
 bool         MAVLINK_BRIDGE_APP_VerifyCmdLength(const CFE_MSG_Message_t *MsgPtr, size_t ExpectedLength);
+void         MAVLINK_BRIDGE_APP_ServiceSerial(void);
 
 #endif

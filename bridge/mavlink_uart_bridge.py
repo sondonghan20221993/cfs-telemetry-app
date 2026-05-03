@@ -85,12 +85,14 @@ def main(argv: list[str]) -> int:
         source_system=args.source_system,
         autoreconnect=True,
     )
+    connection.mav.robust_parsing = True
     print(f"serial open: {args.serial_path} baud={args.baudrate}", flush=True)
 
     last_status_log = 0.0
+    last_other_type_log = 0.0
 
     while True:
-        msg = connection.recv_match(type=list(INTERESTING_TYPES), blocking=True, timeout=1.0)
+        msg = connection.recv_match(blocking=True, timeout=1.0)
         if msg is None:
             now = time.time()
             if now - last_status_log >= 5.0:
@@ -98,7 +100,24 @@ def main(argv: list[str]) -> int:
                 last_status_log = now
             continue
 
-        print(describe_message(msg), flush=True)
+        msg_type = msg.get_type()
+        if msg_type == "BAD_DATA":
+            raw = getattr(msg, "data", b"")
+            preview = " ".join(f"{byte:02X}" for byte in raw[:32])
+            print(f"BAD_DATA len={len(raw)} data={preview}", flush=True)
+            continue
+
+        if msg_type in INTERESTING_TYPES:
+            print(describe_message(msg), flush=True)
+            continue
+
+        now = time.time()
+        if now - last_other_type_log >= 5.0:
+            print(
+                f"other MAVLink message type observed: {msg_type}",
+                flush=True,
+            )
+            last_other_type_log = now
 
 
 if __name__ == "__main__":

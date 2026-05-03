@@ -706,6 +706,9 @@ void MAVLINK_BRIDGE_APP_ServiceSerial(void)
 {
     uint32  NowMs;
     uint8   RxBuffer[MAVLINK_BRIDGE_APP_READ_CHUNK_SIZE];
+    char    HexPreview[3 * 16 + 1];
+    size_t  PreviewCount;
+    size_t  Offset;
     ssize_t ReadSize;
 
     NowMs = MAVLINK_BRIDGE_APP_GetTimeMs();
@@ -732,9 +735,29 @@ void MAVLINK_BRIDGE_APP_ServiceSerial(void)
     ReadSize = read(MAVLINK_BRIDGE_APP_Data.SerialFd, RxBuffer, sizeof(RxBuffer));
     if (ReadSize > 0)
     {
+        PreviewCount = ((size_t)ReadSize < 16U) ? (size_t)ReadSize : 16U;
+        Offset       = 0;
+        memset(HexPreview, 0, sizeof(HexPreview));
+
+        for (size_t Index = 0; Index < PreviewCount; ++Index)
+        {
+            int Written = snprintf(&HexPreview[Offset], sizeof(HexPreview) - Offset,
+                                   (Index + 1U < PreviewCount) ? "%02X " : "%02X",
+                                   (unsigned int)RxBuffer[Index]);
+            if (Written <= 0)
+            {
+                break;
+            }
+            Offset += (size_t)Written;
+            if (Offset >= sizeof(HexPreview))
+            {
+                break;
+            }
+        }
+
         CFE_EVS_SendEvent(MAVLINK_BRIDGE_APP_LINK_EID, CFE_EVS_EventType_INFORMATION,
-                          "MAVLINK_BRIDGE_APP: read %ld bytes first=0x%02X",
-                          (long)ReadSize, (unsigned int)RxBuffer[0]);
+                          "MAVLINK_BRIDGE_APP: read %ld bytes first=0x%02X data=%s",
+                          (long)ReadSize, (unsigned int)RxBuffer[0], HexPreview);
         MAVLINK_BRIDGE_APP_HandleReceivedBytes(RxBuffer, ReadSize, NowMs);
         return;
     }

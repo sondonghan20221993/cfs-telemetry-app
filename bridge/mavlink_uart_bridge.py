@@ -205,6 +205,9 @@ class Bridge:
                 if not data:
                     continue
 
+                preview = " ".join(f"{byte:02X}" for byte in data[:32])
+                print(f"read {len(data)} bytes data={preview}", flush=True)
+
                 frames = self.parser.feed(data)
                 for frame in frames:
                     print(describe_frame(frame), flush=True)

@@ -710,6 +710,7 @@ void MAVLINK_BRIDGE_APP_ServiceSerial(void)
     size_t  PreviewCount;
     size_t  Offset;
     ssize_t ReadSize;
+    bool    SawData;
 
     NowMs = MAVLINK_BRIDGE_APP_GetTimeMs();
 
@@ -732,9 +733,10 @@ void MAVLINK_BRIDGE_APP_ServiceSerial(void)
         return;
     }
 
-    ReadSize = read(MAVLINK_BRIDGE_APP_Data.SerialFd, RxBuffer, sizeof(RxBuffer));
-    if (ReadSize > 0)
+    SawData = false;
+    while ((ReadSize = read(MAVLINK_BRIDGE_APP_Data.SerialFd, RxBuffer, sizeof(RxBuffer))) > 0)
     {
+        SawData = true;
         PreviewCount = ((size_t)ReadSize < 64U) ? (size_t)ReadSize : 64U;
         Offset       = 0;
         memset(HexPreview, 0, sizeof(HexPreview));
@@ -759,6 +761,10 @@ void MAVLINK_BRIDGE_APP_ServiceSerial(void)
                           "MAVLINK_BRIDGE_APP: read %ld bytes first=0x%02X data=%s",
                           (long)ReadSize, (unsigned int)RxBuffer[0], HexPreview);
         MAVLINK_BRIDGE_APP_HandleReceivedBytes(RxBuffer, ReadSize, NowMs);
+    }
+
+    if (SawData)
+    {
         return;
     }
 

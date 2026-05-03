@@ -179,7 +179,15 @@ class Bridge:
             self.serial_path,
             self.baudrate,
             timeout=self.timeout_s,
+            bytesize=serial.EIGHTBITS,
+            parity=serial.PARITY_NONE,
+            stopbits=serial.STOPBITS_ONE,
+            xonxoff=False,
+            rtscts=False,
+            dsrdtr=False,
         )
+        self.serial_port.reset_input_buffer()
+        self.serial_port.reset_output_buffer()
         print(f"serial open: {self.serial_path} baud={self.baudrate}", flush=True)
 
     def ensure_serial(self) -> None:

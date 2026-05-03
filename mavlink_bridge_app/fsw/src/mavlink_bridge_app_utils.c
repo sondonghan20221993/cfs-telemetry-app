@@ -706,7 +706,7 @@ void MAVLINK_BRIDGE_APP_ServiceSerial(void)
 {
     uint32  NowMs;
     uint8   RxBuffer[MAVLINK_BRIDGE_APP_READ_CHUNK_SIZE];
-    char    HexPreview[3 * 16 + 1];
+    char    HexPreview[3 * 64 + 1];
     size_t  PreviewCount;
     size_t  Offset;
     ssize_t ReadSize;
@@ -735,7 +735,7 @@ void MAVLINK_BRIDGE_APP_ServiceSerial(void)
     ReadSize = read(MAVLINK_BRIDGE_APP_Data.SerialFd, RxBuffer, sizeof(RxBuffer));
     if (ReadSize > 0)
     {
-        PreviewCount = ((size_t)ReadSize < 16U) ? (size_t)ReadSize : 16U;
+        PreviewCount = ((size_t)ReadSize < 64U) ? (size_t)ReadSize : 64U;
         Offset       = 0;
         memset(HexPreview, 0, sizeof(HexPreview));
 

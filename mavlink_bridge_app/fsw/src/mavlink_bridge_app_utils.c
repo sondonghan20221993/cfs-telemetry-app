@@ -534,12 +534,18 @@ static void MAVLINK_BRIDGE_APP_ProcessReceivedByte(uint8 Byte, uint32 RxTimestam
         case MAVLINK_PARSE_WAIT_STX:
             if (Byte == MAVLINK_STX_V1)
             {
+                CFE_EVS_SendEvent(MAVLINK_BRIDGE_APP_PARSE_EID, CFE_EVS_EventType_INFORMATION,
+                                  "MAVLINK_BRIDGE_APP: saw STX_V1 rx_ms=%lu",
+                                  (unsigned long)RxTimestampMs);
                 MAVLINK_BRIDGE_APP_ResetParser();
                 MAVLINK_BRIDGE_APP_Parser.IsV2  = 0;
                 MAVLINK_BRIDGE_APP_Parser.State = MAVLINK_PARSE_GOT_LENGTH;
             }
             else if (Byte == MAVLINK_STX_V2)
             {
+                CFE_EVS_SendEvent(MAVLINK_BRIDGE_APP_PARSE_EID, CFE_EVS_EventType_INFORMATION,
+                                  "MAVLINK_BRIDGE_APP: saw STX_V2 rx_ms=%lu",
+                                  (unsigned long)RxTimestampMs);
                 MAVLINK_BRIDGE_APP_ResetParser();
                 MAVLINK_BRIDGE_APP_Parser.IsV2  = 1;
                 MAVLINK_BRIDGE_APP_Parser.State = MAVLINK_PARSE_GOT_LENGTH;

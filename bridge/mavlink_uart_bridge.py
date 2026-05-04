@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 import argparse
 import sys
+import termios
 import time
 
+import serial
 from pymavlink import mavutil
 
 
@@ -71,6 +73,47 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def configure_serial_raw(port: serial.Serial, baudrate: int) -> None:
+    baud_attr_name = f"B{baudrate}"
+    baud_attr = getattr(termios, baud_attr_name, None)
+    if baud_attr is None:
+        raise RuntimeError(f"unsupported termios baudrate: {baudrate}")
+
+    fd = port.fileno()
+    attrs = termios.tcgetattr(fd)
+
+    iflag, oflag, cflag, lflag, ispeed, ospeed, cc = attrs
+
+    iflag &= ~(
+        termios.IGNBRK
+        | termios.BRKINT
+        | termios.PARMRK
+        | termios.ISTRIP
+        | termios.INLCR
+        | termios.IGNCR
+        | termios.ICRNL
+        | termios.IXON
+        | termios.IXOFF
+        | termios.IXANY
+    )
+    oflag &= ~termios.OPOST
+    lflag &= ~(termios.ECHO | termios.ECHONL | termios.ICANON | termios.ISIG | termios.IEXTEN)
+    cflag &= ~(termios.CSIZE | termios.PARENB | termios.CSTOPB | termios.CRTSCTS)
+    cflag |= termios.CS8 | termios.CREAD | termios.CLOCAL
+
+    attrs[0] = iflag
+    attrs[1] = oflag
+    attrs[2] = cflag
+    attrs[3] = lflag
+    attrs[4] = baud_attr
+    attrs[5] = baud_attr
+    attrs[6][termios.VMIN] = 0
+    attrs[6][termios.VTIME] = 0
+
+    termios.tcflush(fd, termios.TCIOFLUSH)
+    termios.tcsetattr(fd, termios.TCSANOW, attrs)
+
+
 def main(argv: list[str]) -> int:
     args = parse_args(argv)
 
@@ -85,6 +128,10 @@ def main(argv: list[str]) -> int:
         source_system=args.source_system,
         autoreconnect=True,
     )
+    if isinstance(connection.port, serial.Serial):
+        configure_serial_raw(connection.port, args.baudrate)
+        connection.port.reset_input_buffer()
+        connection.port.reset_output_buffer()
     connection.mav.robust_parsing = True
     print(f"serial open: {args.serial_path} baud={args.baudrate}", flush=True)
 

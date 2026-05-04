@@ -66,16 +66,12 @@ void LORA_FC_DOWNLINK_APP_TaskPipe(const CFE_SB_Buffer_t *sb_buf_ptr)
 {
     static CFE_SB_MsgId_t cmd_mid        = CFE_SB_MSGID_RESERVED;
     static CFE_SB_MsgId_t send_hk_mid    = CFE_SB_MSGID_RESERVED;
-    static CFE_SB_MsgId_t attitude_mid   = CFE_SB_MSGID_RESERVED;
-    static CFE_SB_MsgId_t ekf_local_mid  = CFE_SB_MSGID_RESERVED;
     CFE_SB_MsgId_t        msg_id         = CFE_SB_INVALID_MSG_ID;
 
     if (!CFE_SB_IsValidMsgId(cmd_mid))
     {
-        cmd_mid       = CFE_SB_ValueToMsgId(LORA_FC_DOWNLINK_APP_CMD_MID);
-        send_hk_mid   = CFE_SB_ValueToMsgId(LORA_FC_DOWNLINK_APP_SEND_HK_MID);
-        attitude_mid  = CFE_SB_ValueToMsgId(FC_ATTITUDE_STATE_MID_VALUE);
-        ekf_local_mid = CFE_SB_ValueToMsgId(FC_EKF_LOCAL_STATE_MID_VALUE);
+        cmd_mid     = CFE_SB_ValueToMsgId(LORA_FC_DOWNLINK_APP_CMD_MID);
+        send_hk_mid = CFE_SB_ValueToMsgId(LORA_FC_DOWNLINK_APP_SEND_HK_MID);
     }
 
     CFE_MSG_GetMsgId(&sb_buf_ptr->Msg, &msg_id);
@@ -87,14 +83,6 @@ void LORA_FC_DOWNLINK_APP_TaskPipe(const CFE_SB_Buffer_t *sb_buf_ptr)
     else if (CFE_SB_MsgId_Equal(msg_id, cmd_mid))
     {
         LORA_FC_DOWNLINK_APP_ProcessGroundCommand(sb_buf_ptr);
-    }
-    else if (CFE_SB_MsgId_Equal(msg_id, attitude_mid))
-    {
-        LORA_FC_DOWNLINK_APP_ProcessAttitude((const MAVLINK_BRIDGE_APP_AttitudeTlm_t *)sb_buf_ptr);
-    }
-    else if (CFE_SB_MsgId_Equal(msg_id, ekf_local_mid))
-    {
-        LORA_FC_DOWNLINK_APP_ProcessLocalState((const MAVLINK_BRIDGE_APP_EkfLocalTlm_t *)sb_buf_ptr);
     }
     else
     {

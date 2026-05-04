@@ -85,16 +85,6 @@ CFE_Status_t LORA_FC_DOWNLINK_APP_Init(void)
         CFE_ES_WriteToSysLog("LORA_FC_DOWNLINK_APP: subscribe cmd\n");
         status = CFE_SB_Subscribe(CFE_SB_ValueToMsgId(LORA_FC_DOWNLINK_APP_CMD_MID), LORA_FC_DOWNLINK_APP_Data.CommandPipe);
     }
-    if (status == CFE_SUCCESS)
-    {
-        CFE_ES_WriteToSysLog("LORA_FC_DOWNLINK_APP: subscribe attitude\n");
-        status = CFE_SB_Subscribe(CFE_SB_ValueToMsgId(FC_ATTITUDE_STATE_MID_VALUE), LORA_FC_DOWNLINK_APP_Data.CommandPipe);
-    }
-    if (status == CFE_SUCCESS)
-    {
-        CFE_ES_WriteToSysLog("LORA_FC_DOWNLINK_APP: subscribe local\n");
-        status = CFE_SB_Subscribe(CFE_SB_ValueToMsgId(FC_EKF_LOCAL_STATE_MID_VALUE), LORA_FC_DOWNLINK_APP_Data.CommandPipe);
-    }
 
     if (status != CFE_SUCCESS)
     {

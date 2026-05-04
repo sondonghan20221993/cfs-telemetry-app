@@ -1,0 +1,9 @@
+#ifndef DEFAULT_LORA_FC_DOWNLINK_APP_MISSION_CFG_H
+#define DEFAULT_LORA_FC_DOWNLINK_APP_MISSION_CFG_H
+
+#include "lora_fc_downlink_app_interface_cfg.h"
+
+#define LORA_FC_DOWNLINK_APP_DEFAULT_PERIOD_MS     1000
+#define LORA_FC_DOWNLINK_APP_FC_STATE_PACKET_TYPE  1
+
+#endif

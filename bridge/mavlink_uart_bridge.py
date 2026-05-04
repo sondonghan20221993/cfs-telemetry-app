@@ -122,49 +122,61 @@ def main(argv: list[str]) -> int:
         flush=True,
     )
 
-    connection = mavutil.mavlink_connection(
-        args.serial_path,
-        baud=args.baudrate,
-        source_system=args.source_system,
-        autoreconnect=True,
-    )
-    if isinstance(connection.port, serial.Serial):
-        configure_serial_raw(connection.port, args.baudrate)
-        connection.port.reset_input_buffer()
-        connection.port.reset_output_buffer()
-    connection.mav.robust_parsing = True
-    print(f"serial open: {args.serial_path} baud={args.baudrate}", flush=True)
-
-    last_status_log = 0.0
-    last_other_type_log = 0.0
-
     while True:
-        msg = connection.recv_match(blocking=True, timeout=1.0)
-        if msg is None:
-            now = time.time()
-            if now - last_status_log >= 5.0:
-                print("waiting for MAVLink frames...", flush=True)
-                last_status_log = now
-            continue
-
-        msg_type = msg.get_type()
-        if msg_type == "BAD_DATA":
-            raw = getattr(msg, "data", b"")
-            preview = " ".join(f"{byte:02X}" for byte in raw[:32])
-            print(f"BAD_DATA len={len(raw)} data={preview}", flush=True)
-            continue
-
-        if msg_type in INTERESTING_TYPES:
-            print(describe_message(msg), flush=True)
-            continue
-
-        now = time.time()
-        if now - last_other_type_log >= 5.0:
-            print(
-                f"other MAVLink message type observed: {msg_type}",
-                flush=True,
+        try:
+            connection = mavutil.mavlink_connection(
+                args.serial_path,
+                baud=args.baudrate,
+                source_system=args.source_system,
+                autoreconnect=True,
             )
-            last_other_type_log = now
+            if isinstance(connection.port, serial.Serial):
+                configure_serial_raw(connection.port, args.baudrate)
+                connection.port.reset_input_buffer()
+                connection.port.reset_output_buffer()
+            connection.mav.robust_parsing = True
+            print(f"serial open: {args.serial_path} baud={args.baudrate}", flush=True)
+
+            last_status_log = 0.0
+            last_other_type_log = 0.0
+
+            while True:
+                msg = connection.recv_match(blocking=True, timeout=1.0)
+                if msg is None:
+                    now = time.time()
+                    if now - last_status_log >= 5.0:
+                        print("waiting for MAVLink frames...", flush=True)
+                        last_status_log = now
+                    continue
+
+                msg_type = msg.get_type()
+                if msg_type == "BAD_DATA":
+                    raw = getattr(msg, "data", b"")
+                    preview = " ".join(f"{byte:02X}" for byte in raw[:32])
+                    print(f"BAD_DATA len={len(raw)} data={preview}", flush=True)
+                    continue
+
+                if msg_type in INTERESTING_TYPES:
+                    print(describe_message(msg), flush=True)
+                    continue
+
+                now = time.time()
+                if now - last_other_type_log >= 5.0:
+                    print(
+                        f"other MAVLink message type observed: {msg_type}",
+                        flush=True,
+                    )
+                    last_other_type_log = now
+        except serial.SerialException as exc:
+            print(f"serial exception: {exc}", flush=True)
+            print("retrying serial connection in 1s...", flush=True)
+            time.sleep(1.0)
+            continue
+        except OSError as exc:
+            print(f"os error on serial connection: {exc}", flush=True)
+            print("retrying serial connection in 1s...", flush=True)
+            time.sleep(1.0)
+            continue
 
 
 if __name__ == "__main__":

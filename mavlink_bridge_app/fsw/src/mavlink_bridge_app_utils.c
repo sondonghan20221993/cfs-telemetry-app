@@ -11,12 +11,15 @@
 #define MAVLINK_STX_V2               0xFD
 #define MAVLINK_MSG_ID_GPS_RAW_INT            24U
 #define MAVLINK_MSG_ID_LOCAL_POSITION_NED      32U
+#define MAVLINK_MSG_ID_GLOBAL_POSITION_INT     33U
 #define MAVLINK_MSG_ID_ATTITUDE      30U
 #define MAVLINK_MSG_ID_EKF_STATUS_REPORT      193U
 #define MAVLINK_GPS_RAW_INT_PAYLOAD_LEN       30U
 #define MAVLINK_GPS_RAW_INT_CRC_EXTRA         24U
 #define MAVLINK_LOCAL_POSITION_NED_PAYLOAD_LEN 28U
 #define MAVLINK_LOCAL_POSITION_NED_CRC_EXTRA   185U
+#define MAVLINK_GLOBAL_POSITION_INT_PAYLOAD_LEN 28U
+#define MAVLINK_GLOBAL_POSITION_INT_CRC_EXTRA   104U
 #define MAVLINK_ATTITUDE_PAYLOAD_LEN 28U
 #define MAVLINK_ATTITUDE_CRC_EXTRA   39U
 #define MAVLINK_EKF_STATUS_PAYLOAD_LEN        22U
@@ -441,6 +444,51 @@ static void MAVLINK_BRIDGE_APP_PublishEkfLocal(uint32 BridgeTimestampMs)
                       (unsigned long)BridgeTimestampMs);
 }
 
+static void MAVLINK_BRIDGE_APP_PublishGlobalPositionAsLocal(uint32 BridgeTimestampMs)
+{
+    MAVLINK_BRIDGE_APP_EkfLocalTlm_t *Tlm;
+    int32                             RelativeAltMm;
+    int16                             VxCms;
+    int16                             VyCms;
+    int16                             VzCms;
+
+    if (MAVLINK_BRIDGE_APP_Parser.PayloadLen != MAVLINK_GLOBAL_POSITION_INT_PAYLOAD_LEN)
+    {
+        MAVLINK_BRIDGE_APP_RecordParseError(MAVLINK_BRIDGE_ERROR_INVALID_VALUE);
+        return;
+    }
+
+    Tlm = &MAVLINK_BRIDGE_APP_Data.EkfLocalTlm;
+
+    RelativeAltMm = MAVLINK_BRIDGE_APP_ReadI32LE(&MAVLINK_BRIDGE_APP_Parser.Payload[16]);
+    VxCms         = (int16)MAVLINK_BRIDGE_APP_ReadU16LE(&MAVLINK_BRIDGE_APP_Parser.Payload[20]);
+    VyCms         = (int16)MAVLINK_BRIDGE_APP_ReadU16LE(&MAVLINK_BRIDGE_APP_Parser.Payload[22]);
+    VzCms         = (int16)MAVLINK_BRIDGE_APP_ReadU16LE(&MAVLINK_BRIDGE_APP_Parser.Payload[24]);
+
+    Tlm->TimestampMs = MAVLINK_BRIDGE_APP_ReadU32LE(&MAVLINK_BRIDGE_APP_Parser.Payload[0]);
+    Tlm->Seq         = ++MAVLINK_BRIDGE_APP_Data.SequenceCounter;
+    Tlm->Valid       = 1;
+    Tlm->Stale       = 0;
+    Tlm->ErrorCode   = MAVLINK_BRIDGE_ERROR_NONE;
+    Tlm->Reserved    = 0;
+    Tlm->X_m         = 0.0f;
+    Tlm->Y_m         = 0.0f;
+    Tlm->Z_m         = -((float)RelativeAltMm / 1000.0f);
+    Tlm->Vx_mps      = (float)VxCms / 100.0f;
+    Tlm->Vy_mps      = (float)VyCms / 100.0f;
+    Tlm->Vz_mps      = (float)VzCms / 100.0f;
+
+    CFE_SB_TimeStampMsg(CFE_MSG_PTR(Tlm->TelemetryHeader));
+    CFE_SB_TransmitMsg(CFE_MSG_PTR(Tlm->TelemetryHeader), true);
+    MAVLINK_BRIDGE_APP_ServiceLoRa();
+
+    CFE_EVS_SendEvent(MAVLINK_BRIDGE_APP_PARSE_EID, CFE_EVS_EventType_INFORMATION,
+                      "MAVLINK_BRIDGE_APP: GLOBAL_POSITION_INT mapped seq=%lu boot_ms=%lu rx_ms=%lu",
+                      (unsigned long)Tlm->Seq,
+                      (unsigned long)Tlm->TimestampMs,
+                      (unsigned long)BridgeTimestampMs);
+}
+
 static void MAVLINK_BRIDGE_APP_PublishGpsRaw(uint32 BridgeTimestampMs)
 {
     MAVLINK_BRIDGE_APP_GpsRawTlm_t *Tlm;
@@ -572,6 +620,27 @@ static void MAVLINK_BRIDGE_APP_HandleFrameComplete(uint32 RxTimestampMs, uint8 C
             MAVLINK_BRIDGE_APP_Data.LastRxTimestampMs  = RxTimestampMs;
             MAVLINK_BRIDGE_APP_SetLinkState(MAVLINK_BRIDGE_LINK_CONNECTED);
             MAVLINK_BRIDGE_APP_PublishEkfLocal(RxTimestampMs);
+        }
+        else
+        {
+            CFE_EVS_SendEvent(MAVLINK_BRIDGE_APP_PARSE_EID, CFE_EVS_EventType_INFORMATION,
+                              "MAVLINK_BRIDGE_APP: crc fail msgid=%lu got=0x%04X expected=0x%04X",
+                              (unsigned long)MAVLINK_BRIDGE_APP_Parser.MsgId,
+                              (unsigned int)ReceivedCrc,
+                              (unsigned int)ComputedCrc);
+            MAVLINK_BRIDGE_APP_RecordParseError(MAVLINK_BRIDGE_ERROR_PARSE_FAIL);
+        }
+    }
+    else if (MAVLINK_BRIDGE_APP_Parser.MsgId == MAVLINK_MSG_ID_GLOBAL_POSITION_INT)
+    {
+        ComputedCrc =
+            MAVLINK_BRIDGE_APP_ComputeFrameCrc(&MAVLINK_BRIDGE_APP_Parser, MAVLINK_GLOBAL_POSITION_INT_CRC_EXTRA);
+        if (ComputedCrc == ReceivedCrc)
+        {
+            MAVLINK_BRIDGE_APP_Data.LastErrorCode     = MAVLINK_BRIDGE_ERROR_NONE;
+            MAVLINK_BRIDGE_APP_Data.LastRxTimestampMs = RxTimestampMs;
+            MAVLINK_BRIDGE_APP_SetLinkState(MAVLINK_BRIDGE_LINK_CONNECTED);
+            MAVLINK_BRIDGE_APP_PublishGlobalPositionAsLocal(RxTimestampMs);
         }
         else
         {

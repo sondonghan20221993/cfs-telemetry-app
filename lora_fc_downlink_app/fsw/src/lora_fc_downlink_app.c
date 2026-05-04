@@ -18,8 +18,6 @@ void LORA_FC_DOWNLINK_APP_Main(void)
 
     CFE_ES_WriteToSysLog("LORA_FC_DOWNLINK_APP: main entry\n");
 
-    CFE_ES_PerfLogEntry(LORA_FC_DOWNLINK_APP_PERF_ID);
-
     status = LORA_FC_DOWNLINK_APP_Init();
     if (status != CFE_SUCCESS)
     {
@@ -29,11 +27,7 @@ void LORA_FC_DOWNLINK_APP_Main(void)
 
     while (CFE_ES_RunLoop(&LORA_FC_DOWNLINK_APP_Data.RunStatus) == true)
     {
-        CFE_ES_PerfLogExit(LORA_FC_DOWNLINK_APP_PERF_ID);
-
         status = CFE_SB_ReceiveBuffer(&sb_buf_ptr, LORA_FC_DOWNLINK_APP_Data.CommandPipe, CFE_SB_PEND_FOREVER);
-
-        CFE_ES_PerfLogEntry(LORA_FC_DOWNLINK_APP_PERF_ID);
 
         if (status == CFE_SUCCESS)
         {
@@ -47,7 +41,6 @@ void LORA_FC_DOWNLINK_APP_Main(void)
         }
     }
 
-    CFE_ES_PerfLogExit(LORA_FC_DOWNLINK_APP_PERF_ID);
     CFE_ES_ExitApp(LORA_FC_DOWNLINK_APP_Data.RunStatus);
 }
 

@@ -16,11 +16,14 @@ void LORA_FC_DOWNLINK_APP_Main(void)
     CFE_Status_t     status;
     CFE_SB_Buffer_t *sb_buf_ptr;
 
+    CFE_ES_WriteToSysLog("LORA_FC_DOWNLINK_APP: main entry\n");
+
     CFE_ES_PerfLogEntry(LORA_FC_DOWNLINK_APP_PERF_ID);
 
     status = LORA_FC_DOWNLINK_APP_Init();
     if (status != CFE_SUCCESS)
     {
+        CFE_ES_WriteToSysLog("LORA_FC_DOWNLINK_APP: init failed rc=0x%08lX\n", (unsigned long)status);
         LORA_FC_DOWNLINK_APP_Data.RunStatus = CFE_ES_RunStatus_APP_ERROR;
     }
 
@@ -53,11 +56,14 @@ CFE_Status_t LORA_FC_DOWNLINK_APP_Init(void)
     CFE_Status_t status;
     char         version_string[LORA_FC_DOWNLINK_APP_CFG_MAX_VERSION_STR_LEN];
 
+    CFE_ES_WriteToSysLog("LORA_FC_DOWNLINK_APP: init begin\n");
+
     memset(&LORA_FC_DOWNLINK_APP_Data, 0, sizeof(LORA_FC_DOWNLINK_APP_Data));
 
     LORA_FC_DOWNLINK_APP_Data.RunStatus = CFE_ES_RunStatus_APP_RUN;
     LORA_FC_DOWNLINK_APP_Data.PacketType = LORA_FC_DOWNLINK_APP_FC_STATE_PACKET_TYPE;
 
+    CFE_ES_WriteToSysLog("LORA_FC_DOWNLINK_APP: before EVS register\n");
     status = CFE_EVS_Register(NULL, 0, CFE_EVS_EventFilter_BINARY);
     if (status != CFE_SUCCESS)
     {
@@ -65,9 +71,11 @@ CFE_Status_t LORA_FC_DOWNLINK_APP_Init(void)
         return status;
     }
 
+    CFE_ES_WriteToSysLog("LORA_FC_DOWNLINK_APP: before HK init\n");
     CFE_MSG_Init(CFE_MSG_PTR(LORA_FC_DOWNLINK_APP_Data.HkTlm.TelemetryHeader),
                  CFE_SB_ValueToMsgId(LORA_FC_DOWNLINK_APP_HK_TLM_MID), sizeof(LORA_FC_DOWNLINK_APP_Data.HkTlm));
 
+    CFE_ES_WriteToSysLog("LORA_FC_DOWNLINK_APP: before pipe create\n");
     status = CFE_SB_CreatePipe(&LORA_FC_DOWNLINK_APP_Data.CommandPipe, LORA_FC_DOWNLINK_APP_PLATFORM_PIPE_DEPTH,
                                LORA_FC_DOWNLINK_APP_PLATFORM_PIPE_NAME);
     if (status != CFE_SUCCESS)
@@ -77,17 +85,21 @@ CFE_Status_t LORA_FC_DOWNLINK_APP_Init(void)
         return status;
     }
 
+    CFE_ES_WriteToSysLog("LORA_FC_DOWNLINK_APP: subscribe send_hk\n");
     status = CFE_SB_Subscribe(CFE_SB_ValueToMsgId(LORA_FC_DOWNLINK_APP_SEND_HK_MID), LORA_FC_DOWNLINK_APP_Data.CommandPipe);
     if (status == CFE_SUCCESS)
     {
+        CFE_ES_WriteToSysLog("LORA_FC_DOWNLINK_APP: subscribe cmd\n");
         status = CFE_SB_Subscribe(CFE_SB_ValueToMsgId(LORA_FC_DOWNLINK_APP_CMD_MID), LORA_FC_DOWNLINK_APP_Data.CommandPipe);
     }
     if (status == CFE_SUCCESS)
     {
+        CFE_ES_WriteToSysLog("LORA_FC_DOWNLINK_APP: subscribe attitude\n");
         status = CFE_SB_Subscribe(CFE_SB_ValueToMsgId(FC_ATTITUDE_STATE_MID_VALUE), LORA_FC_DOWNLINK_APP_Data.CommandPipe);
     }
     if (status == CFE_SUCCESS)
     {
+        CFE_ES_WriteToSysLog("LORA_FC_DOWNLINK_APP: subscribe local\n");
         status = CFE_SB_Subscribe(CFE_SB_ValueToMsgId(FC_EKF_LOCAL_STATE_MID_VALUE), LORA_FC_DOWNLINK_APP_Data.CommandPipe);
     }
 
@@ -98,10 +110,12 @@ CFE_Status_t LORA_FC_DOWNLINK_APP_Init(void)
         return status;
     }
 
+    CFE_ES_WriteToSysLog("LORA_FC_DOWNLINK_APP: before version string\n");
     CFE_Config_GetVersionString(version_string, LORA_FC_DOWNLINK_APP_CFG_MAX_VERSION_STR_LEN, "LoRa FC Downlink App",
                                 LORA_FC_DOWNLINK_APP_VERSION, LORA_FC_DOWNLINK_APP_BUILD_CODENAME,
                                 LORA_FC_DOWNLINK_APP_LAST_OFFICIAL);
 
+    CFE_ES_WriteToSysLog("LORA_FC_DOWNLINK_APP: init success\n");
     CFE_EVS_SendEvent(LORA_FC_DOWNLINK_APP_INIT_INF_EID, CFE_EVS_EventType_INFORMATION,
                       "LoRa FC Downlink App Initialized.%s", version_string);
 

@@ -36,7 +36,8 @@ typedef enum
     MAVLINK_PARSE_GOT_MSGID2,
     MAVLINK_PARSE_GOT_MSGID3,
     MAVLINK_PARSE_READING_PAYLOAD,
-    MAVLINK_PARSE_GOT_CRC1
+    MAVLINK_PARSE_GOT_CRC1,
+    MAVLINK_PARSE_GOT_CRC2
 } MAVLINK_BRIDGE_APP_ParseState_t;
 
 typedef struct
@@ -50,6 +51,7 @@ typedef struct
     uint8                           CompId;
     uint32                          MsgId;
     uint8                           CrcLow;
+    uint8                           CrcHigh;
     uint8                           Payload[MAVLINK_MAX_PAYLOAD_LEN];
 } MAVLINK_BRIDGE_APP_ParserContext_t;
 
@@ -631,17 +633,17 @@ static void MAVLINK_BRIDGE_APP_ProcessReceivedByte(uint8 Byte, uint32 RxTimestam
 
         case MAVLINK_PARSE_GOT_CRC1:
             MAVLINK_BRIDGE_APP_Parser.CrcLow = Byte;
-            MAVLINK_BRIDGE_APP_Parser.State  = MAVLINK_PARSE_WAIT_STX;
+            MAVLINK_BRIDGE_APP_Parser.State  = MAVLINK_PARSE_GOT_CRC2;
+            break;
+
+        case MAVLINK_PARSE_GOT_CRC2:
+            MAVLINK_BRIDGE_APP_Parser.CrcHigh = Byte;
+            MAVLINK_BRIDGE_APP_HandleFrameComplete(RxTimestampMs, MAVLINK_BRIDGE_APP_Parser.CrcHigh);
             break;
 
         default:
             MAVLINK_BRIDGE_APP_ResetParser();
             break;
-    }
-
-    if (MAVLINK_BRIDGE_APP_Parser.State == MAVLINK_PARSE_WAIT_STX && MAVLINK_BRIDGE_APP_Parser.CrcLow != 0U)
-    {
-        MAVLINK_BRIDGE_APP_HandleFrameComplete(RxTimestampMs, Byte);
     }
 }
 
